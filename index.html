@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Universo 3D · Para Mi Reina Lucía</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/examples/js/renderers/CSS2DRenderer.js"></script>
+<style>
+  :root{--bg:#000;}
+  html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;font-family:Arial,system-ui,-apple-system;}
+  #container{position:fixed;inset:0}
+  /* UI overlay (optional) */
+  .ui {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    color: #fff9;
+    z-index: 20;
+    font-size: 14px;
+    pointer-events: none;
+    text-shadow: 0 0 6px #000;
+  }
+  .ui b{color:#ffccff;text-shadow:0 0 12px #ff88ff}
+  /* small mobile hint */
+  .hint {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 20;
+    color: #fff7;
+    font-size: 13px;
+    background: linear-gradient(90deg,#0004,#0008);
+    padding:8px 10px;border-radius:8px;backdrop-filter: blur(4px);
+  }
+</style>
+</head>
+<body>
+<div id="container"></div>
+<div class="ui"><b>Mi Reina Lucía</b> — arrastra con click para rotar • haz clic para corazones</div>
+<div class="hint">Si el mouse no rota, presiona y arrastra</div>
+
+<script type="module">
+// ------------------------------
+// Three.js 3D Romantic Scene
+// Single-file HTML using ES modules from CDN
+// ------------------------------
+
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/controls/OrbitControls.js';
+
+const container = document.getElementById('container');
+
+// Renderer
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+container.appendChild(renderer.domElement);
+
+// Scene & Camera
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x000000, 0.0006);
+
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 5000);
+camera.position.set(0, 80, 800);
+
+// Controls (rotate with mouse drag) - pan/zoom limited for nicer UX
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enablePan = false;
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.enableZoom = true;
+controls.minDistance = 300;
+controls.maxDistance = 1800;
+
+// Lighting
+const ambient = new THREE.AmbientLight(0xffffff, 0.25);
+scene.add(ambient);
+
+const pointMain = new THREE.PointLight(0xff88ff, 2.4, 1800, 2);
+pointMain.position.set(0, 0, 0);
+scene.add(pointMain);
+
+// helper glow: a larger slightly transparent sphere with additive blending
+const glowGeom = new THREE.SphereGeometry(1, 32, 32);
+const glowMat = new THREE.MeshBasicMaterial({
+  color: 0xff66ff,
+  transparent: true,
+  opacity: 0.25,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+
+// central star (sphere)
+const starRadius = 90;
+const starGeom = new THREE.SphereGeometry(starRadius, 64, 64);
+const starMat = new THREE.MeshStandardMaterial({
+  color: 0x8b2cff,
+  emissive: 0x5a00a8,
+  emissiveIntensity: 1.4,
+  metalness: 0.1,
+  roughness: 0.4,
+  side: THREE.FrontSide
+});
+const starMesh = new THREE.Mesh(starGeom, starMat);
+scene.add(starMesh);
+
+// glow layers
+const glow1 = new THREE.Mesh(new THREE.SphereGeometry(starRadius*1.25,32,32), glowMat);
+glow1.position.copy(starMesh.position);
+scene.add(glow1);
+
+// small corona using shader-like sprite (canvas texture)
+function makeCorona(size, color1, color2, alpha=0.55){
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = 256;
+  const cx = cvs.getContext('2d');
+  const grad = cx.createRadialGradient(128,128,10,128,128,128);
+  grad.addColorStop(0, color1);
+  grad.addColorStop(0.5, color2);
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  cx.fillStyle = grad;
+  cx.fillRect(0,0,256,256);
+  const tex = new THREE.CanvasTexture(cvs);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent:true, blending:THREE.AdditiveBlending, opacity: alpha });
+  const spr = new THREE.Sprite(mat);
+  spr.scale.set(size,size,1);
+  return spr;
+}
+const corona = makeCorona(starRadius*4,'rgba(255,200,255,0.9)','rgba(170,50,200,0.6)',0.9);
+scene.add(corona);
+
+// Particle starfield (Points)
+const starCount = 1800;
+const starsGeom = new THREE.BufferGeometry();
+const positions = new Float32Array(starCount * 3);
+const sizes = new Float32Array(starCount);
+for (let i=0;i<starCount;i++){
+  const r = 1200 + Math.random()*1200;
+  const theta = Math.random() * Math.PI * 2;
+  const phi = Math.acos(2*Math.random()-1);
+  const x = r * Math.sin(phi) * Math.cos(theta);
+  const y = r * Math.sin(phi) * Math.sin(theta);
+  const z = r * Math.cos(phi);
+  positions[i*3] = x;
+  positions[i*3+1] = y;
+  positions[i*3+2] = z;
+  sizes[i] = 1 + Math.random()*2.2;
+}
+starsGeom.setAttribute('position', new THREE.BufferAttribute(positions,3));
+starsGeom.setAttribute('size', new THREE.BufferAttribute(sizes,1));
+const starMat = new THREE.PointsMaterial({ color: 0xffffff, sizeAttenuation: true, size: 1.8, transparent: true, opacity: 0.9 });
+const points = new THREE.Points(starsGeom, starMat);
+scene.add(points);
+
+// ---------- Words as Sprites (canvas textures) ----------
+const textGroups = []; // hold groups for each orbit
+
+const wordLists = [
+  // orbit 1 (closest)
+  ["Mi Reina Lucía","Te amo","Mi vida","Mi diosa","Mi fresita","Mi luz","Mi corazón","Te adoro"],
+  // orbit 2 (mid)
+  ["Mi princesa","Mi universo","Mi amor eterno","Mi tesoro","Mi cielo","Mi paz","Mi todo","Mi razón"],
+  // orbit 3 (far)
+  ["Te necesito","Te extraño","Mi estrella","Amor eterno","Mi lucerito","Preciosa","Mi reina","Lucía"]
+];
+
+// create a sprite texture for a given text
+function makeTextSprite(text, options = {}) {
+  const font = options.font || 'bold 36px Arial';
+  const padding = options.padding ?? 12;
+  const color = options.color || '#ffd6ff';
+  const outline = options.outline || '#420042';
+  const glow = options.glow || 'rgba(255,150,255,0.28)';
+
+  // create canvas
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  // measure text
+  ctx.font = font;
+  const metrics = ctx.measureText(text);
+  const textWidth = Math.ceil(metrics.width);
+  const w = textWidth + padding*2;
+  const h = Math.ceil(parseInt(font,10) * 1.6) + padding*2;
+  canvas.width = Math.max(128, w);
+  canvas.height = Math.max(64, h);
+
+  // re-apply fonts after resizing
+  ctx.font = font;
+
+  // glow
+  ctx.fillStyle = glow;
+  ctx.fillRect(0,0,canvas.width, canvas.height);
+
+  // outline (stroke)
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = outline;
+  ctx.strokeText(text, padding, canvas.height/2 + 12);
+
+  // text fill
+  ctx.fillStyle = color;
+  ctx.fillText(text, padding, canvas.height/2 + 12);
+
+  // small radial highlight behind text
+  const grad = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, Math.max(canvas.width,canvas.height));
+  grad.addColorStop(0, 'rgba(255,200,255,0.12)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,canvas.width, canvas.height);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.encoding = THREE.sRGBEncoding;
+  const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, sizeAttenuation: true });
+  const sprite = new THREE.Sprite(mat);
+  // scale relative to canvas pixel size
+  const scaleFactor = 0.35;
+  sprite.scale.set(canvas.width * scaleFactor, canvas.height * scaleFactor, 1);
+  return sprite;
+}
+
+// create groups for three orbits with different radii
+const orbitRadii = [280, 420, 600]; // spaced further
+const orbitSpeed = [0.002, -0.0012, 0.0007]; // small speed differences
+
+for (let ring=0; ring<3; ring++){
+  const group = new THREE.Group();
+  group.userData.radius = orbitRadii[ring];
+  group.userData.speed = orbitSpeed[ring];
+  scene.add(group);
+  textGroups.push(group);
+
+  const wordsThis = wordLists[ring];
+  for (let i=0;i<wordsThis.length;i++){
+    const s = makeTextSprite(wordsThis[i], {
+      font: (wordsThis[i].includes("Mi Reina Lucía") ? 'bold 52px Arial' : 'bold 36px Arial'),
+      color: (wordsThis[i].includes("Mi Reina Lucía") ? '#ff99ff' : '#ffd6ff'),
+      outline: '#2e0033'
+    });
+    // initial placement around circle
+    const angle = (i / wordsThis.length) * Math.PI * 2;
+    const x = Math.cos(angle) * group.userData.radius;
+    const y = Math.sin(angle) * group.userData.radius * 0.18; // slight ellipse for visual depth
+    const z = Math.sin(angle) * group.userData.radius * 0.45;
+
+    s.position.set(x, y, z);
+    group.add(s);
+
+    // small light-ish fake glow near the sprite (tiny sprite)
+    const lightSpr = makeTextSprite(" ", {font:'12px Arial', color:'#fff', outline:'#000'});
+    lightSpr.material.opacity = 0.12;
+    lightSpr.scale.set(30,10,1);
+    lightSpr.position.set(x*0.98, y*0.98, z*0.98);
+    group.add(lightSpr);
+  }
+}
+
+// animate orbit rotation
+let time = 0;
+
+// hearts system: sprite from canvas (heart emoji)
+function makeHeartSprite(size=48){
+  const cvs = document.createElement('canvas');
+  cvs.width = cvs.height = 128;
+  const cx = cvs.getContext('2d');
+  cx.font = '96px serif';
+  cx.textAlign = 'center';
+  cx.textBaseline = 'middle';
+  cx.fillStyle = '#ff4d88';
+  cx.fillText('❤', 64, 64);
+  const tex = new THREE.CanvasTexture(cvs);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  const spr = new THREE.Sprite(mat);
+  spr.scale.set(size, size, 1);
+  return spr;
+}
+
+// on click: spawn a few hearts at mouse ray point in front of camera
+window.addEventListener('pointerdown', (ev) => {
+  // get normalized device coords
+  const mouse = new THREE.Vector2(
+    (ev.clientX / innerWidth) * 2 - 1,
+    -(ev.clientY / innerHeight) * 2 + 1
+  );
+
+  // create a ray from camera
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera);
+  // place hearts at a point a bit in front of camera along ray (e.g. 450 units)
+  const spawnPoint = raycaster.ray.at(450, new THREE.Vector3());
+
+  // spawn 6 hearts with slightly different velocities
+  for (let i=0;i<6;i++){
+    const h = makeHeartSprite(24 + Math.random()*24);
+    h.position.copy(spawnPoint);
+    // random velocity
+    h.userData.v = new THREE.Vector3((Math.random()-0.5)*2, Math.random()*2, (Math.random()-0.5)*2);
+    h.userData.life = 80 + Math.floor(Math.random()*40);
+    scene.add(h);
+    hearts.push(h);
+  }
+});
+
+// hearts array for update
+const hearts = [];
+
+// small helper to resize
+function onResize(){
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', onResize, {passive:true});
+onResize();
+
+// subtle camera movement to make scene lively
+const cameraBase = new THREE.Vector3().copy(camera.position);
+
+// animate loop
+function animate(){
+  time += 1;
+  // rotate each group around Y axis slightly and also spin groups for layering
+  for (let gi=0; gi<textGroups.length; gi++){
+    const g = textGroups[gi];
+    g.rotation.y += g.userData.speed * 60; // amplify speed to noticeable
+  }
+
+  // update hearts
+  for (let i = hearts.length - 1; i >= 0; i--){
+    const h = hearts[i];
+    h.position.add(h.userData.v);
+    h.material.opacity -= 0.008;
+    h.userData.life--;
+    if (h.userData.life <= 0 || h.material.opacity <= 0) {
+      scene.remove(h);
+      hearts.splice(i,1);
+    }
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+
+// initial gentle camera orbit (very subtle)
+let camT = 0;
+(function camFloat(){
+  camT += 0.002;
+  camera.position.x = cameraBase.x + Math.sin(camT) * 20;
+  camera.position.y = cameraBase.y + Math.sin(camT*0.6) * 8;
+  camera.lookAt(new THREE.Vector3(0,0,0));
+  requestAnimationFrame(camFloat);
+})();
+
+// safety: handle WebGL loss
+renderer.domElement.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  alert('WebGL context lost. Recarga la página.');
+}, false);
+
+</script>
+</body>
+</html>
